@@ -9,7 +9,7 @@ on:
 
 jobs:
   bing-checkin:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04  # 固定用 22.04，避免 24.04 的包依赖问题
     timeout-minutes: 300
     env:
       PYTHONUNBUFFERED: 1
@@ -23,39 +23,55 @@ jobs:
       with:
         python-version: '3.9'
 
-    # 用官方 Action 安装 Chrome，保证最新稳定版
-    - name: Setup Chrome
-      uses: browser-actions/setup-chrome@v1
-      with:
-        chrome-version: stable
+    # 安装固定版本 Chrome 147，和驱动完全匹配
+    - name: Install Chrome 147
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y curl wget unzip xvfb libxi6 libgconf-2-4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
 
-    # 关键：安装依赖并获取 Chrome 版本，直接修改脚本让它使用对应版本
-    - name: 安装依赖并修复脚本版本匹配
+        # 下载 Chrome 147 固定版本
+        wget https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_147.0.7727.55-1_amd64.deb
+        sudo dpkg -i google-chrome-stable_147.0.7727.55-1_amd64.deb || sudo apt-get install -fy
+
+        # 下载对应版本 ChromeDriver
+        wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/147.0.7727.55/linux64/chromedriver-linux64.zip
+        unzip chromedriver-linux64.zip
+        sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+        rm -rf chromedriver* google-chrome-stable_147.0.7727.55-1_amd64.deb
+
+    # 强制修改脚本，完全弃用 undetected-chromedriver，改用原生 Selenium
+    - name: Patch script to use native selenium
+      run: |
+        # 备份原脚本
+        cp bingZDH.py bingZDH.py.bak
+
+        # 删除所有 undetected-chromedriver 相关代码
+        sed -i 's/import undetected_chromedriver as uc//g' bingZDH.py
+        sed -i 's/uc\.Chrome/webdriver\.Chrome/g' bingZDH.py
+        sed -i 's/, version_main=[0-9]*//g' bingZDH.py
+
+        # 如果脚本里没有导入 selenium，就加上
+        grep -q "from selenium import webdriver" bingZDH.py || sed -i '1i from selenium import webdriver' bingZDH.py
+
+    - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install --upgrade undetected-chromedriver selenium
+        pip install selenium
 
-        # 获取当前 Chrome 主版本号（比如 147）
-        CHROME_MAJOR=$(google-chrome --version | grep -oE "[0-9]+" | head -n1)
-        echo "Chrome major version: $CHROME_MAJOR"
-
-        # 强制修改脚本：删除写死的 version_main=138，改为自动使用当前版本
-        sed -i "s/version_main=[0-9]*/version_main=$CHROME_MAJOR/g" bingZDH.py
-        sed -i "s/, version_main=[0-9]*//g" bingZDH.py
-
-    - name: 创建配置目录
+    - name: Create config dir
       run: mkdir -p config
 
-    - name: 写入账号配置
+    - name: Write account config
       run: |
         echo '${{ secrets.ACCOUNTS_CONFIG }}' > config/accounts.json
 
-    - name: 运行 Bing 自动化
+    - name: Run Bing automation
       run: |
         python bingZDH.py --once
 
-    - name: 上传日志
+    - name: Upload logs
       uses: actions/upload-artifact@v4
       if: always()
       with:
