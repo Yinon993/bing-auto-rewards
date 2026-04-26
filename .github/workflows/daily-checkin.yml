@@ -26,36 +26,35 @@ jobs:
       with:
         python-version: '3.9'
 
-    - name: 安装 Chrome（强制清理旧文件 + 修复所有 gpg 错误）
+    - name: 强制安装 Chrome 148（和驱动版本完全匹配）
       run: |
-        # 关键：强制清理旧文件，避免 File exists 冲突
+        # 清理旧文件
         sudo rm -f /usr/share/keyrings/google-chrome.gpg
         sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+        sudo rm -rf /home/runner/.local/share/undetected_chromedriver
 
         # 安装依赖
         sudo apt-get update
         sudo apt-get install -y curl gnupg2 ca-certificates unzip
 
-        # 导入密钥（双重保险，避免下载失败）
-        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg || true
-
-        # 添加源
+        # 导入密钥
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg
         echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
-        # 安装 Chrome
+        # 强制安装 Chrome 148 版本
         sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
+        sudo apt-get install -y google-chrome-stable=148.0.7603.61-1
 
-    - name: 修复脚本硬编码版本号
+    - name: 修复脚本里的硬编码版本号
       run: |
         sed -i 's/, version_main=138//g' bingZDH.py
         sed -i 's/version_main=138//g' bingZDH.py
 
-    - name: 安装所有依赖
+    - name: 安装依赖并锁定 undetected-chromedriver 版本
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install --upgrade selenium undetected-chromedriver
+        pip install undetected-chromedriver==3.5.5 selenium==4.15.2
 
     - name: 创建配置目录
       run: mkdir -p config
