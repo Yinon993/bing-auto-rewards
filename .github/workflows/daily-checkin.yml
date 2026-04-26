@@ -23,22 +23,26 @@ jobs:
       with:
         python-version: '3.9'
 
-    # 直接用官方 Chrome Action，自动搞定所有依赖和版本匹配
+    # 用官方 Action 安装 Chrome，保证最新稳定版
     - name: Setup Chrome
       uses: browser-actions/setup-chrome@v1
       with:
         chrome-version: stable
 
-    - name: 修复脚本硬编码版本号
-      run: |
-        sed -i 's/, version_main=138//g' bingZDH.py
-        sed -i 's/version_main=138//g' bingZDH.py
-
-    - name: 安装依赖
+    # 关键：安装依赖并获取 Chrome 版本，直接修改脚本让它使用对应版本
+    - name: 安装依赖并修复脚本版本匹配
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install --upgrade undetected-chromedriver selenium
+
+        # 获取当前 Chrome 主版本号（比如 147）
+        CHROME_MAJOR=$(google-chrome --version | grep -oE "[0-9]+" | head -n1)
+        echo "Chrome major version: $CHROME_MAJOR"
+
+        # 强制修改脚本：删除写死的 version_main=138，改为自动使用当前版本
+        sed -i "s/version_main=[0-9]*/version_main=$CHROME_MAJOR/g" bingZDH.py
+        sed -i "s/, version_main=[0-9]*//g" bingZDH.py
 
     - name: 创建配置目录
       run: mkdir -p config
