@@ -2,21 +2,20 @@ name: Bing Daily Check-in
 
 on:
   schedule:
-    # 每天凌晨2点执行（UTC时间，对应北京时间10点）
     - cron: '0 2 * * *'
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
   push:
     branches: [ main ]
 
 jobs:
   bing-checkin:
     runs-on: ubuntu-latest
-    timeout-minutes: 300  # 设置5小时超时
+    timeout-minutes: 300
     env:
-      PYTHONUNBUFFERED: 1  # 确保Python输出不被缓存
-      DISPLAY: :99  # 为无头模式设置显示
-      CHROME_BIN: /usr/bin/google-chrome  # Chrome路径
-      CHROMEDRIVER_PATH: /usr/local/bin/chromedriver  # ChromeDriver路径
+      PYTHONUNBUFFERED: 1
+      DISPLAY: :99
+      CHROME_BIN: /usr/bin/google-chrome
+      CHROMEDRIVER_PATH: /usr/local/bin/chromedriver
     
     steps:
     - name: Checkout code
@@ -27,38 +26,26 @@ jobs:
       with:
         python-version: '3.9'
         
-    - name: Install Chrome and ChromeDriver (修复 gpg 报错)
+    - name: Install Chrome and ChromeDriver (终极修复版)
       run: |
-        # 安装Chrome（修复 /dev/tty 错误）
-        export GPG_TTY=$(tty)
-        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg
+        sudo rm -f /usr/share/keyrings/google-chrome.gpg
+        sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+
+        sudo apt-get update
+        sudo apt-get install -y curl gnupg2 ca-certificates
+
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg || \
+        curl -fsSL https://www.google.com/linuxrepositories/apt.html | grep -A 20 "Linux Package Signing Key" | grep "-----BEGIN PGP PUBLIC KEY BLOCK-----" -A 100 | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg
+
         echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+
         sudo apt-get update
         sudo apt-get install -y google-chrome-stable
-        
-        # 获取Chrome版本并安装兼容的ChromeDriver
-        CHROME_VERSION=$(google-chrome --version | grep -oE "[0-9]+\.[0-9]+")
-        echo "Chrome major version: $CHROME_VERSION"
-        
-        # 使用更兼容的方法安装ChromeDriver
-        # 方法1: 尝试从官方源下载
-        if wget -q --spider "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION"; then
-          echo "Official ChromeDriver available for version $CHROME_VERSION"
-          wget -O /tmp/chromedriver_version "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION"
-          CHROMEDRIVER_VERSION=$(cat /tmp/chromedriver_version)
-          wget -O /tmp/chromedriver.zip "https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip"
-        else
-          echo "Official ChromeDriver not available, using fallback method"
-          # 方法2: 使用apt安装
-          sudo apt-get install -y chromium-chromedriver
-          sudo ln -sf /usr/bin/chromedriver /usr/local/bin/chromedriver
-          exit 0
-        fi
-        
-        # 解压并安装
-        unzip /tmp/chromedriver.zip -d /usr/local/bin/
+
+        pip install selenium webdriver-manager
+        python -c "from webdriver_manager.chrome import ChromeDriverManager; ChromeDriverManager().install()"
+        sudo ln -sf $(python -c "from webdriver_manager.chrome import ChromeDriverManager; print(ChromeDriverManager().install())") /usr/local/bin/chromedriver
         chmod +x /usr/local/bin/chromedriver
-        rm /tmp/chromedriver.zip /tmp/chromedriver_version
         
     - name: Verify Chrome and ChromeDriver
       run: |
@@ -66,8 +53,6 @@ jobs:
         which google-chrome
         chromedriver --version
         which chromedriver
-        echo "Chrome binary: $CHROME_BIN"
-        echo "ChromeDriver path: $CHROMEDRIVER_PATH"
         
     - name: Install dependencies
       run: |
@@ -79,7 +64,6 @@ jobs:
       
     - name: Setup accounts configuration
       run: |
-        # 从GitHub Secrets读取账号配置
         echo '${{ secrets.ACCOUNTS_CONFIG }}' > config/accounts.json
         
     - name: Run Bing automation
