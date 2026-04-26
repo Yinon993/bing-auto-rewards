@@ -9,7 +9,7 @@ on:
 
 jobs:
   bing-checkin:
-    runs-on: ubuntu-22.04  # 固定用 22.04，避免 24.04 的包依赖问题
+    runs-on: ubuntu-22.04
     timeout-minutes: 300
     env:
       PYTHONUNBUFFERED: 1
@@ -23,36 +23,37 @@ jobs:
       with:
         python-version: '3.9'
 
-    # 安装固定版本 Chrome 147，和驱动完全匹配
+    # 安装固定版本 Chrome 147 和对应驱动
     - name: Install Chrome 147
       run: |
         sudo apt-get update
         sudo apt-get install -y curl wget unzip xvfb libxi6 libgconf-2-4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2
 
-        # 下载 Chrome 147 固定版本
         wget https://dl.google.com/linux/chrome/deb/pool/main/g/google-chrome-stable/google-chrome-stable_147.0.7727.55-1_amd64.deb
         sudo dpkg -i google-chrome-stable_147.0.7727.55-1_amd64.deb || sudo apt-get install -fy
 
-        # 下载对应版本 ChromeDriver
         wget https://edgedl.me.gvt1.com/edgedl/chrome/chrome-for-testing/147.0.7727.55/linux64/chromedriver-linux64.zip
         unzip chromedriver-linux64.zip
         sudo mv chromedriver-linux64/chromedriver /usr/local/bin/
         sudo chmod +x /usr/local/bin/chromedriver
         rm -rf chromedriver* google-chrome-stable_147.0.7727.55-1_amd64.deb
 
-    # 强制修改脚本，完全弃用 undetected-chromedriver，改用原生 Selenium
-    - name: Patch script to use native selenium
+    # 关键：适配你的配置，同时修复脚本问题
+    - name: Patch script for your config
       run: |
-        # 备份原脚本
         cp bingZDH.py bingZDH.py.bak
 
-        # 删除所有 undetected-chromedriver 相关代码
+        # 替换 undetected-chromedriver 为原生 selenium
         sed -i 's/import undetected_chromedriver as uc//g' bingZDH.py
         sed -i 's/uc\.Chrome/webdriver\.Chrome/g' bingZDH.py
         sed -i 's/, version_main=[0-9]*//g' bingZDH.py
-
-        # 如果脚本里没有导入 selenium，就加上
         grep -q "from selenium import webdriver" bingZDH.py || sed -i '1i from selenium import webdriver' bingZDH.py
+
+        # 添加所有稳定必需的启动参数
+        sed -i '/chrome_options = webdriver.ChromeOptions()/a chrome_options.add_argument("--no-sandbox")\nchrome_options.add_argument("--disable-dev-shm-usage")\nchrome_options.add_argument("--headless=new")\nchrome_options.add_argument("--disable-gpu")\nchrome_options.add_argument("--window-size=1920,1080")\nchrome_options.add_argument("--disable-blink-features=AutomationControlled")\nchrome_options.add_argument("--disable-extensions")\nchrome_options.add_argument("--disable-popup-blocking")\nchrome_options.add_argument("--lang=en-US")' bingZDH.py
+
+        # 延长超时时间
+        sed -i 's/WebDriverWait(driver, [0-9]*)/WebDriverWait(driver, 60)/g' bingZDH.py
 
     - name: Install dependencies
       run: |
@@ -63,11 +64,11 @@ jobs:
     - name: Create config dir
       run: mkdir -p config
 
-    - name: Write account config
+    - name: Write your account config
       run: |
         echo '${{ secrets.ACCOUNTS_CONFIG }}' > config/accounts.json
 
-    - name: Run Bing automation
+    - name: Run Bing automation with your accounts
       run: |
         python bingZDH.py --once
 
