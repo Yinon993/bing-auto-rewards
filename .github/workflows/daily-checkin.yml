@@ -26,18 +26,27 @@ jobs:
       with:
         python-version: '3.9'
 
-    - name: 安装 Chrome（修复所有 gpg / 版本错误）
+    - name: 安装 Chrome（强制清理旧文件 + 修复所有 gpg 错误）
       run: |
+        # 关键：强制清理旧文件，避免 File exists 冲突
+        sudo rm -f /usr/share/keyrings/google-chrome.gpg
+        sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+
+        # 安装依赖
         sudo apt-get update
         sudo apt-get install -y curl gnupg2 ca-certificates unzip
 
-        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg
+        # 导入密钥（双重保险，避免下载失败）
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg || true
+
+        # 添加源
         echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
 
+        # 安装 Chrome
         sudo apt-get update
         sudo apt-get install -y google-chrome-stable
 
-    - name: 自动修复脚本硬编码版本号（关键！）
+    - name: 修复脚本硬编码版本号
       run: |
         sed -i 's/, version_main=138//g' bingZDH.py
         sed -i 's/version_main=138//g' bingZDH.py
