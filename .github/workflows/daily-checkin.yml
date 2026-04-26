@@ -26,35 +26,41 @@ jobs:
       with:
         python-version: '3.9'
 
-    - name: 强制安装 Chrome 148（和驱动版本完全匹配）
+    - name: 安装依赖 + Chrome（二进制包，无 apt 问题）
       run: |
-        # 清理旧文件
-        sudo rm -f /usr/share/keyrings/google-chrome.gpg
-        sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-        sudo rm -rf /home/runner/.local/share/undetected_chromedriver
-
-        # 安装依赖
         sudo apt-get update
-        sudo apt-get install -y curl gnupg2 ca-certificates unzip
+        sudo apt-get install -y curl wget unzip xvfb libxi6 libgconf-2-4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libxkbcommon0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libasound2 libatspi2.0-0
 
-        # 导入密钥
-        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg
-        echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+        # 下载 Chrome 稳定版二进制包
+        wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+        sudo dpkg -i google-chrome-stable_current_amd64.deb || sudo apt-get install -fy
 
-        # 强制安装 Chrome 148 版本
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable=148.0.7603.61-1
+        # 下载匹配的 ChromeDriver
+        CHROME_VERSION=$(google-chrome --version | cut -d ' ' -f3 | cut -d '.' -f1)
+        echo "Chrome major version: $CHROME_VERSION"
+        wget -O chromedriver.zip https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION
+        CHROMEDRIVER_VERSION=$(cat chromedriver.zip)
+        wget -O chromedriver_linux64.zip https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip
+        unzip chromedriver_linux64.zip
+        sudo mv chromedriver /usr/local/bin/
+        sudo chmod +x /usr/local/bin/chromedriver
+        rm -rf chromedriver*.zip google-chrome-stable_current_amd64.deb
 
-    - name: 修复脚本里的硬编码版本号
+    - name: 强制修改脚本，不用 undetected-chromedriver，改用原生 selenium
       run: |
-        sed -i 's/, version_main=138//g' bingZDH.py
-        sed -i 's/version_main=138//g' bingZDH.py
+        # 备份原脚本
+        cp bingZDH.py bingZDH.py.bak
+        
+        # 替换所有 uc.Chrome 调用为原生 selenium，同时删除写死的 version_main
+        sed -i 's/import undetected_chromedriver as uc//g' bingZDH.py
+        sed -i 's/uc\.Chrome/webdriver\.Chrome/g' bingZDH.py
+        sed -i 's/, version_main=[0-9]*//g' bingZDH.py
 
-    - name: 安装依赖并锁定 undetected-chromedriver 版本
+    - name: 安装依赖
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install undetected-chromedriver==3.5.5 selenium==4.15.2
+        pip install selenium
 
     - name: 创建配置目录
       run: mkdir -p config
