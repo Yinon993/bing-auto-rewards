@@ -27,10 +27,11 @@ jobs:
       with:
         python-version: '3.9'
         
-    - name: Install Chrome and ChromeDriver
+    - name: Install Chrome and ChromeDriver (修复 gpg 报错)
       run: |
-        # 安装Chrome
-        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --dearmor -o /usr/share/keyrings/google-chrome.gpg
+        # 安装Chrome（修复 /dev/tty 错误）
+        export GPG_TTY=$(tty)
+        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | sudo gpg --batch --no-tty --dearmor -o /usr/share/keyrings/google-chrome.gpg
         echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
         sudo apt-get update
         sudo apt-get install -y google-chrome-stable
